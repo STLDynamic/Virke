@@ -39,11 +39,24 @@ Publikacja wymaga wcześniejszego zapisania kodu w repozytorium na GitHubie.
    Regularnie eksportuj całą kopię JSON przez **Exportera säkerhetskopia**.
    **Importera** zastępuje bieżące dane dopiero po walidacji i potwierdzeniu.
 
-Przykład: 1000 palet × 7 desek 22 × 100 × 1200 mm = 7000 desek,
-8400 metrów bieżących i 18,48 m³ netto. Przy 5% zapasu: 7350 desek,
-8820 metrów i 19,404 m³. Zapas naliczany jest po zsumowaniu zapotrzebowania
-na artykuł w całym wybranym okresie, z zaokrągleniem liczby desek w górę.
-Metry i m³ w raporcie dotyczą ilości z zapasem. CSV zawiera również ilości netto.
+Raport grupuje elementy według **grubości × szerokości**, np. 16 × 75 i 22 × 100.
+Długość, nazwa artykułu, gatunek i jakość nie tworzą oddzielnych grup w raporcie.
+Długość nadal służy do obliczenia objętości elementu w recepturze.
+Dotyczy to zarówno desek, jak i klocków: klocek 75 × 75 × 75 należy do grupy
+75 × 75, a 75 × 100 × 100 do grupy 75 × 100.
+
+Przykład: 1000 palet, każda z 8 deskami 16 × 75 × 1200 i 3 deskami
+16 × 75 × 800, zużywa **14,4 m³ materiału 16 × 75**. Nie powstają dwa
+wiersze raportu dla długości 1200 i 800. Dodatkowe 9 klocków 75 × 75 × 75
+na każdą paletę to **3,796875 m³ materiału 75 × 75**.
+
+Główne wartości to m³ netto i m³ z opcjonalnym procentowym zapasem.
+Zapas jest narzutem na objętość netto; nie zaokrągla się go do całych desek.
+Dla zakresu kilku miesięcy raport pokazuje też netto każdego miesiąca.
+CSV zawiera wiersz na materiał i zaplanowany miesiąc oraz sumę okresu.
+Wartości obliczane są przed zaokrągleniem do prezentacji; CSV zawiera 6 miejsc
+po przecinku. Rozwinięte obliczenia zachowują artykuły, długości i produkty.
+Istniejące dane oraz kopie JSON pozostają zgodne i nie wymagają migracji.
 
 Zmiana receptury lub wymiarów deski przelicza wszystkie miesiące, także minione.
 Dla innego wariantu użyj osobnego produktu/artykułu. Deski używanej w recepturze

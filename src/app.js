@@ -35,7 +35,7 @@ const meta = {
   boards: ['Full koll på ditt virke.', 'Alla brädor, mått och kvaliteter på ett ställe.', 'Dina brädor', 'Registrera de färdiga brädor som används i produktionen.'],
   products: ['Varje pall börjar med ett recept.', 'Koppla brädor till dina produkter. Vi summerar behovet.', 'Dina produkter', 'Brädrecept per färdig produkt.'],
   plan: ['Planera nästa produktion.', 'Ange hela månadens volym per produkt.', 'Månadsplan', 'Sex månader åt gången. Spara planen för att uppdatera materialbehovet.'],
-  report: ['Rätt virke. I rätt mängd.', 'Från produktionsplan till ett samlat materialbehov.', 'Materialrapport', 'Summerat per brädartikel, med underlag för varje produkt och månad.'],
+  report: ['Rätt virke. I rätt mängd.', 'Från produktionsplan till ett samlat materialbehov.', 'Materialrapport', 'Förbrukning i m³ per material: tjocklek × bredd, oavsett längd.'],
 };
 function stats(values) {
   $('#stats').innerHTML = values.map(([label, value, hint]) => `<div class="stat"><span class="eyebrow">${esc(label)}</span><div class="stat-value">${value}</div><p>${esc(hint)}</p></div>`).join('');
@@ -86,9 +86,10 @@ function getReport() {
 function renderReport() {
   try {
     const r = getReport();
-    stats([['Produktion', fmt(r.quantity), `${r.planned} produktmånader med plan`], ['Brädor inkl. spill', fmt(r.pieces), `${$('#waste').value} % spillpåslag`], ['Volym inkl. spill', `${fmt(r.cubicMeters, 3)} <small>m³</small>`, 'Färdiga brädmått']]);
+    stats([['Produktion', fmt(r.quantity), `${r.planned} produktmånader med plan`], ['Förbrukning netto', `${fmt(r.netCubicMeters, 4)} <small>m³</small>`, `${r.rows.length} material · alla längder summerade`], ['Volym inkl. spill', `${fmt(r.cubicMeters, 4)} <small>m³</small>`, `${$('#waste').value} % volympåslag`]]);
     $('#report-caption').textContent = `${$('#report-from').value} – ${$('#report-to').value} · Spill: ${$('#waste').value} % · ${pending() ? 'OBS! Osparade ändringar ingår inte. ' : ''}Endast sparade produktmånader ingår. Kontrollera att alla önskade produkter är planerade.`;
-    table(['BRÄDA', 'NETTO', 'INKL. SPILL', 'LÖPMETER', 'VOLYM', 'UNDERLAG'], r.rows.map(row => `<tr><td><strong>${esc(row.board.name)}</strong><span class="muted">${dims(row.board)}</span><span class="muted">${esc(row.board.species)} · ${esc(row.board.grade)}</span></td><td>${fmt(row.pieces)} st</td><td><strong>${fmt(row.purchase)} st</strong></td><td>${fmt(row.meters, 2)} m</td><td>${fmt(row.cubicMeters, 4)} m³</td><td><details><summary>Visa beräkning</summary>${row.sources.map(s => `<p>${esc(s.product)} · ${s.month}<br>${fmt(s.quantity)} × ${fmt(s.perProduct)} = ${fmt(s.pieces)} st</p>`).join('')}</details></td></tr>`).join(''));
+    const multipleMonths = $('#report-from').value !== $('#report-to').value;
+    table(['MATERIAL · MM', 'FÖRBRUKNING · M³', 'INKL. SPILL · M³', ...(multipleMonths ? ['PER MÅNAD · M³ NETTO'] : []), 'UNDERLAG'], r.rows.map(row => `<tr><td><strong>${esc(row.material)}</strong><span class="muted">Alla längder summerade</span></td><td><strong>${fmt(row.netCubicMeters, 4)} m³</strong></td><td>${fmt(row.cubicMeters, 4)} m³</td>${multipleMonths ? `<td>${row.months.map(m => `<span class="recipe-summary">${esc(monthLabel(m.month))}: <strong>${fmt(m.netCubicMeters, 4)} m³</strong></span>`).join('')}</td>` : ''}<td><details><summary>Visa beräkning</summary>${row.sources.map(s => `<p>${esc(s.product)} · ${s.month}<br>${esc(s.board.name)} · ${dims(s.board)}<br>${fmt(s.quantity)} × ${fmt(s.perProduct)} = ${fmt(s.pieces)} st · ${fmt(s.netCubicMeters, 6)} m³</p>`).join('')}</details></td></tr>`).join(''));
     if (!r.planned) $('#report-caption').textContent += ' Ingen produktion är planerad i detta intervall.';
     $('#csv').disabled = $('#print').disabled = false;
   } catch (error) { $('#table').textContent = error.message; $('#csv').disabled = $('#print').disabled = true; }

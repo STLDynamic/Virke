@@ -52,30 +52,40 @@ export function report(data, from, to, waste = 0) {
   if (!validMonth(from) || !validMonth(to) || from > to) fail('Välj ett giltigt månadsintervall.');
   if (!Number.isFinite(waste) || waste < 0 || waste > 100 || Math.abs(waste * 10 - Math.round(waste * 10)) > 1e-8) fail('Spillpåslag måste vara 0–100 %, med högst en decimal.');
   const rows = new Map();
+  const boards = new Map(data.boards.map(b => [b.id, b]));
   let planned = 0, quantity = 0;
   for (const p of data.products) {
     for (const [month, count] of Object.entries(p.plans)) {
       if (month < from || month > to) continue;
       planned++; quantity += count;
       for (const r of p.recipe) {
-        if (!rows.has(r.boardId)) rows.set(r.boardId, { board: data.boards.find(b => b.id === r.boardId), pieces: 0, sources: [] });
-        const row = rows.get(r.boardId), pieces = count * r.pieces;
+        const board = boards.get(r.boardId);
+        // Material identity is the cross-section only; length is used for volume.
+        const key = `${board.thickness}x${board.width}`;
+        if (!rows.has(key)) rows.set(key, {
+          thickness: board.thickness, width: board.width,
+          material: `${board.thickness} × ${board.width}`,
+          pieces: 0, netCubicMeters: 0, months: new Map(), sources: [],
+        });
+        const row = rows.get(key), pieces = count * r.pieces;
         if (!Number.isSafeInteger(pieces) || !Number.isSafeInteger(row.pieces + pieces)) fail('För stort behov för säker beräkning.');
+        const netCubicMeters = pieces * volume(board);
         row.pieces += pieces;
-        row.sources.push({ product: p.name, month, quantity: count, perProduct: r.pieces, pieces });
+        row.netCubicMeters += netCubicMeters;
+        row.months.set(month, (row.months.get(month) || 0) + netCubicMeters);
+        row.sources.push({ board, product: p.name, month, quantity: count, perProduct: r.pieces, pieces, netCubicMeters });
       }
     }
   }
-  const result = [...rows.values()].map(row => {
-    // Integer arithmetic keeps rounding exact even for large production plans.
-    const numerator = BigInt(row.pieces) * BigInt(1000 + Math.round(waste * 10));
-    const purchase = Number((numerator + 999n) / 1000n);
-    if (!Number.isSafeInteger(purchase)) fail('För stort behov för säker beräkning.');
-    return { ...row, purchase, meters: purchase * row.board.length / 1000, cubicMeters: purchase * volume(row.board) };
-  }).sort((a, b) => a.board.name.localeCompare(b.board.name, 'sv', { numeric: true }));
-  const pieces = result.reduce((s, r) => s + r.purchase, 0);
+  const multiplier = (1000 + Math.round(waste * 10)) / 1000;
+  const result = [...rows.values()].map(row => ({
+    ...row,
+    cubicMeters: row.netCubicMeters * multiplier,
+    months: [...row.months].sort(([a], [b]) => a.localeCompare(b)).map(([month, netCubicMeters]) => ({ month, netCubicMeters, cubicMeters: netCubicMeters * multiplier })),
+  })).sort((a, b) => a.thickness - b.thickness || a.width - b.width);
+  const pieces = result.reduce((s, r) => s + r.pieces, 0);
   if (!Number.isSafeInteger(pieces) || !Number.isSafeInteger(quantity)) fail('För stort behov för säker beräkning.');
-  return { rows: result, planned, quantity, pieces, cubicMeters: result.reduce((s, r) => s + r.cubicMeters, 0) };
+  return { rows: result, planned, quantity, pieces, netCubicMeters: result.reduce((s, r) => s + r.netCubicMeters, 0), cubicMeters: result.reduce((s, r) => s + r.cubicMeters, 0) };
 }
 export function csv(result) {
   const cell = value => {
@@ -83,5 +93,7 @@ export function csv(result) {
     if (/^[=+@\-\t\r\n]/.test(s)) s = `'${s}`;
     return `"${s.replaceAll('"', '""')}"`;
   };
-  return '\uFEFF' + [['Bräda', 'Träslag', 'Kvalitet', 'Tjocklek mm', 'Bredd mm', 'Längd mm', 'Netto st', 'Inkl. spill st', 'Löpmeter', 'm³'], ...result.rows.map(r => [r.board.name, r.board.species, r.board.grade, r.board.thickness, r.board.width, r.board.length, r.pieces, r.purchase, r.meters.toFixed(3).replace('.', ','), r.cubicMeters.toFixed(6).replace('.', ',')])].map(row => row.map(cell).join(';')).join('\r\n');
+  const decimal = n => n.toFixed(6).replace('.', ',');
+  // One row per material and planned month, including the selected period total.
+  return '\uFEFF' + [['Material', 'Tjocklek mm', 'Bredd mm', 'Månad', 'Förbrukning m³', 'Inkl. spill m³', 'Period totalt netto m³', 'Period totalt inkl. spill m³'], ...result.rows.flatMap(r => r.months.map(m => [r.material, r.thickness, r.width, m.month, decimal(m.netCubicMeters), decimal(m.cubicMeters), decimal(r.netCubicMeters), decimal(r.cubicMeters)]))].map(row => row.map(cell).join(';')).join('\r\n');
 }
